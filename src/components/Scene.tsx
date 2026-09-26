@@ -2,7 +2,7 @@
 
 import { useRef, useState, useMemo } from "react";
 import { Canvas, useFrame, useThree, extend } from "@react-three/fiber";
-import { Stars, Sparkles, useTexture, Float, Text, shaderMaterial, Line } from "@react-three/drei";
+import { Stars, Sparkles, useTexture, Float, Text, shaderMaterial, Line, Preload } from "@react-three/drei";
 import { useRouter } from "next/navigation";
 import * as THREE from "three";
 
@@ -81,11 +81,11 @@ function Island({ data, size, isTeleporting, setTeleportTarget }: any) {
       <group>
         {/* Animated glowing objects specific to each realm's color (No images!) */}
         <Sparkles 
-          count={60} 
-          scale={size * 1.5} 
-          size={3} 
-          speed={hovered ? 0.8 : 0.3} 
-          opacity={hovered ? 1 : 0.5} 
+          count={120} 
+          scale={size * 1.8} 
+          size={4} 
+          speed={hovered ? 1.0 : 0.4} 
+          opacity={hovered ? 1 : 0.6} 
           color={data.color} 
         />
         {/* Soft magical glow emitted from the island */}
@@ -113,6 +113,7 @@ function Island({ data, size, isTeleporting, setTeleportTarget }: any) {
         <Text
           position={[0, -(size / 2 + 0.3), 0]}
           fontSize={size * 0.12}
+          font="/CinzelDecorative-Bold.ttf"
           color={hovered ? data.color : "#ffffff"}
           anchorX="center"
           anchorY="middle"
@@ -172,14 +173,16 @@ function IslandGroup({ setTeleportTarget, teleportTarget }: any) {
 
 function Constellations() {
   // Generate random constellation lines purely mathematically (no images)
-  const constellations = useMemo(() => {
-    const arr = [];
+  const { lines, points } = useMemo(() => {
+    const linesArr = [];
+    const pointsArr = [];
     for (let i = 0; i < 12; i++) {
-      const points = [];
+      const linePoints = [];
       const startX = (Math.random() - 0.5) * 25;
       const startY = (Math.random() - 0.5) * 15;
       const startZ = -15 - Math.random() * 10; // Deep background
-      points.push(new THREE.Vector3(startX, startY, startZ));
+      linePoints.push(new THREE.Vector3(startX, startY, startZ));
+      pointsArr.push(startX, startY, startZ);
       
       let currX = startX;
       let currY = startY;
@@ -190,35 +193,40 @@ function Constellations() {
         currX += (Math.random() - 0.5) * 6;
         currY += (Math.random() - 0.5) * 6;
         currZ += (Math.random() - 0.5) * 3;
-        points.push(new THREE.Vector3(currX, currY, currZ));
+        linePoints.push(new THREE.Vector3(currX, currY, currZ));
+        pointsArr.push(currX, currY, currZ);
       }
-      arr.push(points);
+      linesArr.push(linePoints);
     }
-    return arr;
+    
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.Float32BufferAttribute(pointsArr, 3));
+    
+    return { lines: linesArr, points: geom };
   }, []);
 
   return (
     <group>
-      {constellations.map((points, idx) => (
-        <group key={idx}>
-          <Line 
-            points={points} 
-            color="#80a0ff" 
-            opacity={0.15} 
-            transparent 
-            lineWidth={0.5} 
-          />
-          {points.map((p, i) => (
-            <mesh key={i} position={p}>
-              <sphereGeometry args={[0.04, 8, 8]} />
-              <meshBasicMaterial color="#ffffff" transparent opacity={0.8} />
-            </mesh>
-          ))}
-        </group>
+      {lines.map((pts, idx) => (
+        <Line 
+          key={idx}
+          points={pts} 
+          color="#80a0ff" 
+          opacity={0.15} 
+          transparent 
+          lineWidth={0.5} 
+        />
       ))}
+      <points geometry={points}>
+        <pointsMaterial size={0.08} color="#ffffff" transparent opacity={0.8} sizeAttenuation={true} />
+      </points>
     </group>
   );
 }
+
+
+
+
 
 function CameraController({ target }: { target: any }) {
   const { camera } = useThree();
@@ -250,8 +258,8 @@ export default function Scene() {
   return (
     <Canvas
       camera={{ position: [0, 0, 5], fov: 60 }}
-      dpr={[1, 2]} // Support for high DPI (4k)
-      gl={{ antialias: true, alpha: true, toneMapping: THREE.ACESFilmicToneMapping }}
+      dpr={[1, 1.5]} // Capped at 1.5 for huge mobile performance gain
+      gl={{ antialias: false, alpha: true, toneMapping: THREE.ACESFilmicToneMapping, powerPreference: "high-performance" }}
     >
       <color attach="background" args={["#02000a"]} />
       
@@ -260,7 +268,7 @@ export default function Scene() {
       
       {/* Deep space background elements */}
       <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
-      <Sparkles count={300} scale={15} size={2} speed={0.4} opacity={0.2} color="#a0c0ff" />
+      <Sparkles count={300} scale={20} size={2} speed={0.4} opacity={0.2} color="#a0c0ff" />
       <Constellations />
       
       <IslandGroup setTeleportTarget={setTeleportTarget} teleportTarget={teleportTarget} />
@@ -271,6 +279,9 @@ export default function Scene() {
       {teleportTarget && (
         <TeleportFade target={teleportTarget} />
       )}
+      
+      {/* Pre-compile all shaders/textures to prevent jank */}
+      <Preload all />
     </Canvas>
   );
 }
